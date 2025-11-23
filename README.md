@@ -167,7 +167,7 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## 📧 Contact
 
-For questions or support, please open an issue or contact: your.email@example.com
+For questions or support, please open an issue or contact: mudassarijaz.tech@gmail.com
 
 ---
 
