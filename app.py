@@ -1,12 +1,3 @@
-# CELL 1
-!pip install groq gradio
-
-# CELL 2
-import os
-os.environ['API_PROVIDER'] = 'groq'
-os.environ['API_KEY'] = 'your api key'  
-
-# CELL 3 - Paste SkillForge code# CELL 3 - SkillForge Application Code Updated for Groq API
 import gradio as gr
 import json
 import os
@@ -14,62 +5,52 @@ import re
 from datetime import datetime
 import warnings
 
-# Suppress Groq SDK warnings related to API key detection if not set globally
-warnings.filterwarnings("ignore", "API key not found. Please set the GROQ_API_KEY environment variable.")
-
+# Suppress warnings
+warnings.filterwarnings("ignore")
 
 # API Configuration
 def get_api_config():
     """Get API configuration from environment"""
-    api_provider = os.environ.get('API_PROVIDER', 'gemini').lower()
-    api_key = os.environ.get('API_KEY', '')
+    api_provider = os.environ.get('API_PROVIDER', 'groq').lower()
+    api_key = os.environ.get('API_KEY', 'your api here')
 
-    # Check for the key based on the selected provider
     if api_provider == 'groq':
-        # Prioritize the key from the environment/CELL 2, otherwise check specific Groq variable
         api_key = api_key or os.environ.get('GROQ_API_KEY')
     elif api_provider == 'gemini':
-         api_key = api_key or os.environ.get('GEMINI_API_KEY')
+        api_key = api_key or os.environ.get('GEMINI_API_KEY')
 
     if not api_key:
-        raise ValueError(f"Please set API_KEY or {api_provider.upper()}_API_KEY environment variable for {api_provider}")
+        raise ValueError(f"Please set API_KEY or {api_provider.upper()}_API_KEY environment variable")
 
     return api_provider, api_key
 
 def extract_json_from_text(text):
     """Extract and clean JSON from response text"""
-    # Remove markdown code blocks
     text = re.sub(r'```json\s*', '', text)
     text = re.sub(r'```\s*', '', text)
     text = text.strip()
-
-    # Try to find JSON object
     json_match = re.search(r'\{.*\}', text, re.DOTALL)
     if json_match:
-        json_str = json_match.group(0)
-        return json_str
+        return json_match.group(0)
     return text
 
 def call_ai_api(prompt, system_prompt=""):
-    """Make API call to selected AI provider with fallback"""
+    """Make API call to selected AI provider"""
     try:
         api_provider, api_key = get_api_config()
 
         if api_provider == 'groq':
             from groq import Groq
             client = Groq(api_key=api_key)
-
             messages = []
             if system_prompt:
                 messages.append({"role": "system", "content": system_prompt})
             messages.append({"role": "user", "content": prompt})
-
             chat_completion = client.chat.completions.create(
                 messages=messages,
-                # Using a highly-optimized model available on Groq
-                model="llama-3.3-70b-versatile", # Original choice from your code
+                model="llama-3.3-70b-versatile",
                 temperature=0.5,
-                max_tokens=4096  # Increased to ensure full JSON course generation
+                max_tokens=4096
             )
             return chat_completion.choices[0].message.content
 
@@ -77,37 +58,24 @@ def call_ai_api(prompt, system_prompt=""):
             import google.generativeai as genai
             genai.configure(api_key=api_key)
             model = genai.GenerativeModel('gemini-1.5-flash')
-
             full_prompt = f"{system_prompt}\n\n{prompt}" if system_prompt else prompt
             response = model.generate_content(full_prompt)
             return response.text
 
-        else:
-            return f"Unknown API provider: {api_provider}"
-
     except Exception as e:
         error_msg = str(e)
-
-        # Check if it's a rate limit error
         if "rate_limit_exceeded" in error_msg or "429" in error_msg:
-            return f"❌ RATE LIMIT ERROR: You've exceeded your API rate limit.\n\n" \
-                   f"Solutions:\n" \
-                   f"1. Wait a few minutes and try again\n" \
-                   f"2. Switch to Gemini API (set API_PROVIDER=gemini)\n" \
-                   f"3. Upgrade your API tier\n\n" \
-                   f"Full error: {error_msg}"
-
+            return f"❌ RATE LIMIT ERROR: You've exceeded your API rate limit.\n\nSolutions:\n1. Wait a few minutes\n2. Switch API provider\n3. Upgrade tier\n\nError: {error_msg}"
         return f"❌ API Error: {error_msg}"
 
 def generate_course(topic, difficulty, progress=gr.Progress()):
     """Generate complete course structure"""
     progress(0.1, desc="🚀 Initializing course generation...")
 
-    system_prompt = """You are SkillForge AI. Create comprehensive courses. Respond with ONLY valid JSON. Do not include any text before or after the JSON."""
+    system_prompt = """You are SkillForge AI. Create comprehensive courses. Respond with ONLY valid JSON."""
 
     prompt = f"""Create a comprehensive course for: "{topic}" at {difficulty} level.
-
-Return ONLY this JSON structure (no other text):
+Return ONLY this JSON structure:
 {{
   "title": "Course Title",
   "difficulty": "{difficulty}",
@@ -121,31 +89,26 @@ Return ONLY this JSON structure (no other text):
           "lesson_number": 1,
           "lesson_title": "Lesson Title",
           "explanation": "Detailed explanation with examples",
-          "examples": ["Practical example 1", "Practical example 2"],
+          "examples": ["Example 1", "Example 2"],
           "key_takeaways": ["Key point 1", "Key point 2"]
         }}
       ]
     }}
   ]
 }}
-
-Create 4-5 modules with 3-4 lessons each. Make it comprehensive and educational."""
+Create 4-5 modules with 3-4 lessons each."""
 
     progress(0.3, desc="🧠 AI is designing your course...")
     response = call_ai_api(prompt, system_prompt)
-
     progress(0.7, desc="📚 Structuring course content...")
 
     try:
         json_str = extract_json_from_text(response)
         course_data = json.loads(json_str)
-
         if not isinstance(course_data, dict) or 'modules' not in course_data:
             raise ValueError("Invalid course structure")
-
         progress(1.0, desc="✅ Course generated successfully!")
         return course_data, create_course_display(course_data), create_mindmap(course_data)
-
     except Exception as e:
         progress(1.0, desc="❌ Error occurred")
         error_msg = f"<div style='color: red; padding: 20px;'><h3>Error: {str(e)}</h3><p>Response preview:</p><pre>{response[:500]}</pre></div>"
@@ -162,17 +125,16 @@ def create_course_display(course_data):
             <h1 style="color: white; margin: 0; font-size: 2.5em;">📚 {course_data.get('title', 'Course')}</h1>
             <p style="color: #f0f0f0; margin-top: 10px; font-size: 1.2em;">Difficulty: <span style="background: rgba(255,255,255,0.3); padding: 5px 15px; border-radius: 20px;">{course_data.get('difficulty', 'N/A')}</span></p>
         </div>
-
         <div style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); padding: 30px; border-radius: 15px; margin-bottom: 30px;">
             <h2 style="color: white; margin-top: 0;">🎯 Learning Outcomes</h2>
             <ul style="color: white; font-size: 1.1em; line-height: 1.8;">
     """
-
+    
     for outcome in course_data.get('learning_outcomes', []):
         html += f"<li>{outcome}</li>"
-
+    
     html += "</ul></div><div>"
-
+    
     colors = [
         "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
         "linear-gradient(135deg, #f093fb 0%, #f5576c 100%)",
@@ -180,14 +142,14 @@ def create_course_display(course_data):
         "linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)",
         "linear-gradient(135deg, #fa709a 0%, #fee140 100%)",
     ]
-
+    
     for idx, module in enumerate(course_data.get('modules', [])):
         color = colors[idx % len(colors)]
         html += f"""
         <div style="background: {color}; padding: 25px; border-radius: 15px; margin-bottom: 25px;">
             <h2 style="color: white; margin-top: 0;">📖 Module {module.get('module_number', idx+1)}: {module.get('module_title', '')}</h2>
         """
-
+        
         for lesson in module.get('lessons', []):
             html += f"""
             <div style="background: rgba(255,255,255,0.15); padding: 20px; border-radius: 10px; margin-top: 15px;">
@@ -202,9 +164,9 @@ def create_course_display(course_data):
             for takeaway in lesson.get('key_takeaways', []):
                 html += f"<li>{takeaway}</li>"
             html += "</ul></div>"
-
+        
         html += "</div>"
-
+    
     html += "</div></div>"
     return html
 
@@ -216,23 +178,21 @@ def create_mindmap(course_data):
     mindmap = f"""
 🎓 {course_data.get('title', 'Course')}
 📊 Difficulty: {course_data.get('difficulty', 'N/A')}
-
 """
-
     for idx, module in enumerate(course_data.get('modules', [])):
         is_last = idx == len(course_data.get('modules', [])) - 1
         prefix = "└──" if is_last else "├──"
         mindmap += f"{prefix} 📚 Module {module.get('module_number', idx+1)}: {module.get('module_title', '')}\n"
-
+        
         lessons = module.get('lessons', [])
         for l_idx, lesson in enumerate(lessons):
             is_last_lesson = l_idx == len(lessons) - 1
             l_prefix = "    └──" if is_last_lesson else "    ├──" if is_last else "│   └──" if is_last_lesson else "│   ├──"
             mindmap += f"{l_prefix} 💡 {lesson.get('lesson_title', '')}\n"
-
+        
         if not is_last:
             mindmap += "│\n"
-
+    
     return mindmap
 
 def create_download_content(course_data):
@@ -244,10 +204,8 @@ def create_download_content(course_data):
 {'='*80}
 SKILLFORGE COURSE
 {'='*80}
-
 Title: {course_data.get('title', 'Course')}
 Difficulty: {course_data.get('difficulty', 'N/A')}
-
 LEARNING OUTCOMES
 {'-'*80}
 """
@@ -273,9 +231,9 @@ LEARNING OUTCOMES
 
     content += f"\n{'='*80}\nGenerated by SkillForge - {datetime.now().strftime('%Y-%m-%d %H:%M')}\n{'='*80}\n"
 
-    # Save to file
+    # Save to file - use /tmp for Hugging Face Spaces
     filename = f"course_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
-    filepath = os.path.join(os.getcwd(), filename)
+    filepath = os.path.join("/tmp", filename)
 
     with open(filepath, 'w', encoding='utf-8') as f:
         f.write(content)
@@ -302,7 +260,6 @@ def generate_quiz(course_data, module_number, progress=gr.Progress()):
 
     prompt = f"""Quiz for: {module.get('module_title', '')}
 Topics: {lessons_titles}
-
 Return ONLY JSON:
 {{
   "module_title": "{module.get('module_title', '')}",
@@ -319,7 +276,6 @@ Return ONLY JSON:
     {{"statement": "Statement", "correct_answer": true, "explanation": "Why"}}
   ]
 }}
-
 5 MCQs + 3 T/F. Keep explanations brief."""
 
     progress(0.5, desc="🧠 AI is creating questions...")
@@ -404,7 +360,7 @@ def display_quiz_questions(quiz_data):
         """
         html_outputs.append(question_html)
 
-    # Pad to 3
+    # Pad to 8 total
     while len(html_outputs) < 8:
         html_outputs.append("")
 
@@ -417,17 +373,16 @@ def submit_quiz(quiz_data, *answers):
 
     mcq_answers = list(answers[:5])
     tf_answers = list(answers[5:8])
-
     correct_count = 0
     total = 8
 
     # Check MCQs
-    for idx, (mcq, user_ans) in enumerate(zip(quiz_data.get('mcqs', [])[:5], mcq_answers)):
+    for mcq, user_ans in zip(quiz_data.get('mcqs', [])[:5], mcq_answers):
         if user_ans and user_ans == mcq.get('correct_answer'):
             correct_count += 1
 
     # Check T/F
-    for idx, (tf, user_ans) in enumerate(zip(quiz_data.get('true_false', [])[:3], tf_answers)):
+    for tf, user_ans in zip(quiz_data.get('true_false', [])[:3], tf_answers):
         correct_ans = "True" if tf.get('correct_answer') else "False"
         if user_ans and user_ans == correct_ans:
             correct_count += 1
@@ -435,17 +390,11 @@ def submit_quiz(quiz_data, *answers):
     percentage = (correct_count / total * 100) if total > 0 else 0
 
     if percentage >= 80:
-        grade_color = "#43e97b"
-        grade_text = "Excellent! 🎉"
-        emoji = "🌟"
+        grade_color, grade_text, emoji = "#43e97b", "Excellent! 🎉", "🌟"
     elif percentage >= 60:
-        grade_text = "Good Job! 👏"
-        grade_color = "#fa709a"
-        emoji = "👍"
+        grade_color, grade_text, emoji = "#fa709a", "Good Job! 👏", "👍"
     else:
-        grade_text = "Keep Learning! 📚"
-        grade_color = "#f5576c"
-        emoji = "💪"
+        grade_color, grade_text, emoji = "#f5576c", "Keep Learning! 📚", "💪"
 
     html = f"""
     <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 1000px; margin: 0 auto;">
@@ -455,7 +404,6 @@ def submit_quiz(quiz_data, *answers):
             <p style="font-size: 3.5em; margin: 20px 0; font-weight: bold;">{correct_count}/{total}</p>
             <p style="font-size: 1.8em;">Score: {percentage:.1f}%</p>
         </div>
-
         <h2 style="color: #667eea; margin-bottom: 20px;">📊 Detailed Results</h2>
     """
 
@@ -515,14 +463,11 @@ def generate_and_store(topic, difficulty):
     course_storage['current_course'] = course_data
 
     if course_data and course_data.get('modules'):
-        # Create download file
         download_path = create_download_content(course_data)
-
         module_options = [f"Module {m.get('module_number', i+1)}: {m.get('module_title', '')}"
                          for i, m in enumerate(course_data['modules'])]
         return (
-            display,
-            mindmap,
+            display, mindmap,
             gr.update(choices=module_options, value=module_options[0], visible=True),
             gr.update(value=download_path, visible=True),
             gr.update(visible=True)
@@ -598,35 +543,12 @@ def submit_quiz_answers(*answers):
         return "<div style='color: red; padding: 20px;'>No quiz data available. Please generate a quiz first.</div>"
     return submit_quiz(course_storage['current_quiz'], *answers)
 
-# Custom CSS
-custom_css = """
-.gradio-container {
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif !important;
-}
-
-h1 {
-    text-align: center !important;
-}
-
-.primary {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
-    border: none !important;
-    color: white !important;
-    font-weight: bold !important;
-    transition: all 0.3s ease !important;
-}
-
-.primary:hover {
-    transform: translateY(-2px) !important;
-    box-shadow: 0 8px 25px rgba(102, 126, 234, 0.4) !important;
-}
-"""
-
 # Create Gradio Interface
-with gr.Blocks(css=custom_css, theme=gr.themes.Soft(primary_hue="purple", secondary_hue="pink")) as app:
+with gr.Blocks() as app:
     gr.HTML("""
     <div style="text-align: center; margin-bottom: 30px;">
-        <h1 style="font-size: 3.5em; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-weight: bold;">
+        <h1 style="font-size: 3.5em; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+                   -webkit-background-clip: text; -webkit-text-fill-color: transparent;">
             🎓 SkillForge
         </h1>
         <p style="font-size: 1.3em; color: #666;">Transform Any Idea Into a Comprehensive Learning Experience</p>
@@ -634,79 +556,51 @@ with gr.Blocks(css=custom_css, theme=gr.themes.Soft(primary_hue="purple", second
     """)
 
     with gr.Tabs():
-        # Tab 1: Course Generator
         with gr.Tab("📚 Course Generator"):
             gr.Markdown("### Generate Your Complete Course")
-
             with gr.Row():
-                topic_input = gr.Textbox(
-                    label="Topic",
-                    placeholder="e.g., Python Programming, Digital Marketing, Data Science",
-                    lines=2
-                )
-                difficulty_input = gr.Dropdown(
-                    choices=["Beginner", "Intermediate", "Advanced"],
-                    label="Difficulty",
-                    value="Intermediate"
-                )
-
+                topic_input = gr.Textbox(label="Topic", placeholder="e.g., Python Programming", lines=2)
+                difficulty_input = gr.Dropdown(choices=["Beginner", "Intermediate", "Advanced"], 
+                                              label="Difficulty", value="Intermediate")
             generate_btn = gr.Button("🚀 Generate Course", variant="primary", size="lg")
             course_output = gr.HTML(label="Your Course")
-
             download_btn = gr.File(label="📥 Download Course", visible=False)
 
-        # Tab 2: Course Blueprint
         with gr.Tab("🗺️ Course Blueprint"):
             gr.Markdown("### Visual Structure")
             mindmap_output = gr.Textbox(label="Course Mindmap", lines=20)
 
-        # Tab 3: Quiz Generator
         with gr.Tab("📝 Quiz Generator"):
             gr.Markdown("### Test Your Knowledge")
-
-            module_selector = gr.Dropdown(label="Select Module for Quiz", choices=[], visible=False)
+            module_selector = gr.Dropdown(label="Select Module", choices=[], visible=False)
             quiz_btn = gr.Button("🎯 Generate Quiz", variant="primary", size="lg", visible=False)
-
             quiz_info = gr.HTML()
-
             gr.Markdown("---")
 
-            # Quiz questions (HTML display)
             with gr.Column():
-                quiz_html_1 = gr.HTML(visible=True)
-                quiz_radio_1 = gr.Radio(choices=["A", "B", "C", "D"], label="Your Answer", visible=False)
-
-                quiz_html_2 = gr.HTML(visible=True)
-                quiz_radio_2 = gr.Radio(choices=["A", "B", "C", "D"], label="Your Answer", visible=False)
-
-                quiz_html_3 = gr.HTML(visible=True)
-                quiz_radio_3 = gr.Radio(choices=["A", "B", "C", "D"], label="Your Answer", visible=False)
-
-                quiz_html_4 = gr.HTML(visible=True)
-                quiz_radio_4 = gr.Radio(choices=["A", "B", "C", "D"], label="Your Answer", visible=False)
-
-                quiz_html_5 = gr.HTML(visible=True)
-                quiz_radio_5 = gr.Radio(choices=["A", "B", "C", "D"], label="Your Answer", visible=False)
-
-                quiz_html_6 = gr.HTML(visible=True)
-                quiz_radio_6 = gr.Radio(choices=["True", "False"], label="Your Answer", visible=False)
-
-                quiz_html_7 = gr.HTML(visible=True)
-                quiz_radio_7 = gr.Radio(choices=["True", "False"], label="Your Answer", visible=False)
-
-                quiz_html_8 = gr.HTML(visible=True)
-                quiz_radio_8 = gr.Radio(choices=["True", "False"], label="Your Answer", visible=False)
+                quiz_html_1 = gr.HTML()
+                quiz_radio_1 = gr.Radio(choices=["A", "B", "C", "D"], label="Answer", visible=False)
+                quiz_html_2 = gr.HTML()
+                quiz_radio_2 = gr.Radio(choices=["A", "B", "C", "D"], label="Answer", visible=False)
+                quiz_html_3 = gr.HTML()
+                quiz_radio_3 = gr.Radio(choices=["A", "B", "C", "D"], label="Answer", visible=False)
+                quiz_html_4 = gr.HTML()
+                quiz_radio_4 = gr.Radio(choices=["A", "B", "C", "D"], label="Answer", visible=False)
+                quiz_html_5 = gr.HTML()
+                quiz_radio_5 = gr.Radio(choices=["A", "B", "C", "D"], label="Answer", visible=False)
+                quiz_html_6 = gr.HTML()
+                quiz_radio_6 = gr.Radio(choices=["True", "False"], label="Answer", visible=False)
+                quiz_html_7 = gr.HTML()
+                quiz_radio_7 = gr.Radio(choices=["True", "False"], label="Answer", visible=False)
+                quiz_html_8 = gr.HTML()
+                quiz_radio_8 = gr.Radio(choices=["True", "False"], label="Answer", visible=False)
 
             submit_quiz_btn = gr.Button("📊 Submit Quiz", variant="primary", size="lg", visible=False)
             quiz_results = gr.HTML()
 
-    # Collect all quiz components
-    quiz_htmls = [quiz_html_1, quiz_html_2, quiz_html_3, quiz_html_4, quiz_html_5,
-                  quiz_html_6, quiz_html_7, quiz_html_8]
-    quiz_radios = [quiz_radio_1, quiz_radio_2, quiz_radio_3, quiz_radio_4, quiz_radio_5,
-                   quiz_radio_6, quiz_radio_7, quiz_radio_8]
+    quiz_htmls = [quiz_html_1, quiz_html_2, quiz_html_3, quiz_html_4, quiz_html_5, quiz_html_6, quiz_html_7, quiz_html_8]
+    quiz_radios = [quiz_radio_1, quiz_radio_2, quiz_radio_3, quiz_radio_4, quiz_radio_5, quiz_radio_6, quiz_radio_7, quiz_radio_8]
 
-    # Event handlers
     generate_btn.click(
         fn=generate_and_store,
         inputs=[topic_input, difficulty_input],
@@ -726,4 +620,4 @@ with gr.Blocks(css=custom_css, theme=gr.themes.Soft(primary_hue="purple", second
     )
 
 if __name__ == "__main__":
-    app.launch(share=True)
+    app.launch()
